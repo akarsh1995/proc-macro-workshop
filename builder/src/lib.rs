@@ -25,6 +25,11 @@ pub fn derive(input: TokenStream) -> TokenStream {
         quote! { #name: std::option::Option<#ty> }
     });
 
+    let builder_fields_defaults = fields.iter().map(|f| {
+        let name = &f.ident;
+        quote! { #name: Default::default() }
+    });
+
     quote!(
         pub struct #command_builder_type {
             #(#builder_fields,)*
@@ -33,10 +38,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         impl #name {
             pub fn builder() -> #command_builder_type {
                 #command_builder_type {
-                    executable: None,
-                    args: None,
-                    env: None,
-                    current_dir: None,
+                    #(#builder_fields_defaults,)*
                 }
             }
         }
