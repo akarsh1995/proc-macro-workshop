@@ -41,6 +41,15 @@ pub fn derive(input: TokenStream) -> TokenStream {
         }
     });
 
+    let set_fields = fields.iter().map(|f| {
+        let name = &f.ident;
+        quote! {
+            #name: self.#name.ok_or(
+                format!("{0} not set; use method {0} to set the {0}'s value.", stringify!(#name))
+            )?
+        }
+    });
+
     quote!(
         pub struct #command_builder_type {
             #(#builder_fields,)*
@@ -48,6 +57,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
         impl #command_builder_type {
             #(#setters)*
+
+            pub fn build(mut self) -> Result<#name, Box<dyn std::error::Error>> {
+                Ok(#name {
+                    #(#set_fields,)*
+                })
+            }
         }
 
         impl #name {
