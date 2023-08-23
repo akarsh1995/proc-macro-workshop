@@ -9,12 +9,25 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let name = input.ident;
     let command_builder_type = Ident::new(&format!("{}Builder", name), Span::call_site());
 
+    let fields = if let syn::Data::Struct(syn::DataStruct {
+        fields: syn::Fields::Named(syn::FieldsNamed { named, .. }),
+        ..
+    }) = input.data
+    {
+        named
+    } else {
+        unimplemented!()
+    };
+
+    let builder_fields = fields.iter().map(|f| {
+        let name = &f.ident;
+        let ty = &f.ty;
+        quote! { #name: std::option::Option<#ty> }
+    });
+
     quote!(
         pub struct #command_builder_type {
-            executable: Option<String>,
-            args: Option<Vec<String>>,
-            env: Option<Vec<String>>,
-            current_dir: Option<String>,
+            #(#builder_fields,)*
         }
 
         impl #name {
