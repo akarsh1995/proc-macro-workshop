@@ -35,14 +35,21 @@ pub fn derive(input: TokenStream) -> TokenStream {
             #(#builder_fields,)*
         }
 
+        impl #command_builder_type {
+            pub fn executable(&mut self, executable: String) -> &mut Self {
+                self.executable = Some(executable);
+                self
+            }
+        }
+
         impl #name {
             pub fn builder() -> #command_builder_type {
                 #command_builder_type {
                     #(#builder_fields_defaults,)*
                 }
             }
+
         }
     )
     .into()
 }
-
