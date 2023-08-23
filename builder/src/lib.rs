@@ -30,16 +30,24 @@ pub fn derive(input: TokenStream) -> TokenStream {
         quote! { #name: Default::default() }
     });
 
+    let setters = fields.iter().map(|f| {
+        let name = &f.ident;
+        let ty = &f.ty;
+        quote! {
+            pub fn #name(&mut self, #name: #ty) -> &mut Self {
+                self.#name = Some(#name);
+                self
+            }
+        }
+    });
+
     quote!(
         pub struct #command_builder_type {
             #(#builder_fields,)*
         }
 
         impl #command_builder_type {
-            pub fn executable(&mut self, executable: String) -> &mut Self {
-                self.executable = Some(executable);
-                self
-            }
+            #(#setters)*
         }
 
         impl #name {
