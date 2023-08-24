@@ -64,9 +64,17 @@ pub fn derive(input: TokenStream) -> TokenStream {
     let builder_fields = fields.iter().map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
+
+        // assume that fields with this attribute have the type Vec stated in the test 07
+        if f.attrs.len() > 0 {
+            let vec_ty = get_angle_bracket_type_arg(ty);
+            return quote! { #name: Vec<#vec_ty> };
+        }
+
         if ty_is_option(ty) {
             return quote! { #name: #ty };
         }
+
         quote! { #name: std::option::Option<#ty> }
     });
 
@@ -75,7 +83,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
         quote! { #name: Default::default() }
     });
 
-    let setters = fields.iter().map(|f| {
+    let custom_attribute_methods = fields.iter().filter_map(|f| {
         let name = &f.ident;
         let ty = &f.ty;
         let attrs = &f.attrs;
@@ -97,16 +105,12 @@ pub fn derive(input: TokenStream) -> TokenStream {
                             if let Lit::Str(literal) = expr.lit {
                                 let ident = Ident::new(literal.value().as_str(), Span::call_site());
                                 let type_inside_vec = get_angle_bracket_type_arg(ty).unwrap();
-                                return quote! {
+                                return Some(quote! {
                                     pub fn #ident(&mut self, #ident: #type_inside_vec) -> &mut Self {
-                                        if let Some(x) = &mut self.#name {
-                                            x.push(#ident)
-                                        } else {
-                                            self.#name = Some(vec![#ident]);
-                                        }
+                                        self.#name.push(#ident);
                                         self
                                     }
-                                };
+                                });
                             }
                         }
                     }
@@ -114,40 +118,55 @@ pub fn derive(input: TokenStream) -> TokenStream {
             }
             unimplemented!()
         }
+        None
+    });
 
-        if ty_is_option(&ty) {
-            // extract the type inside Option<type>
-            let opt_inner_ty = get_angle_bracket_type_arg(&ty).unwrap();
-            quote! {
-                pub fn #name(&mut self, #name: #opt_inner_ty) -> &mut Self {
-                    self.#name = Some(#name);
-                    self
+    let setters = fields.iter().filter_map(|f| {
+        let name = &f.ident;
+        let ty = &f.ty;
+        let attrs = &f.attrs;
+        if attrs.is_empty() {
+            Some(if ty_is_option(&ty) {
+                // extract the type inside Option<type>
+                let opt_inner_ty = get_angle_bracket_type_arg(&ty).unwrap();
+                quote! {
+                    pub fn #name(&mut self, #name: #opt_inner_ty) -> &mut Self {
+                        self.#name = Some(#name);
+                        self
+                    }
                 }
-            }
+            } else {
+                quote! {
+                    pub fn #name(&mut self, #name: #ty) -> &mut Self {
+                        self.#name = Some(#name);
+                        self
+                    }
+                }
+            })
         } else {
-            quote! {
-                pub fn #name(&mut self, #name: #ty) -> &mut Self {
-                    self.#name = Some(#name);
-                    self
-                }
-            }
+            None
         }
     });
 
-    let set_fields = fields.iter().map(|f| {
+    let set_fields = fields.iter().filter_map(|f| {
         let name = &f.ident;
 
-        if ty_is_option(&f.ty) {
-            return quote! {
-                #name: self.#name.take()
-            };
+        // fields with custom attrs are vec
+        if f.attrs.len() > 0 {
+            return Some(quote! { #name: self.#name.clone() });
         }
 
-        quote! {
+        if ty_is_option(&f.ty) {
+            return Some(quote! {
+                #name: self.#name.take()
+            });
+        }
+
+        Some(quote! {
             #name: self.#name.take().ok_or(
                 format!("{0} not set; use method {0} to set the {0}'s value.", stringify!(#name))
             )?
-        }
+        })
     });
 
     quote!(
@@ -157,7 +176,7 @@ pub fn derive(input: TokenStream) -> TokenStream {
 
         impl #command_builder_type {
             #(#setters)*
-
+            #(#custom_attribute_methods)*
             pub fn build(&mut self) -> Result<#name, Box<dyn std::error::Error>> {
                 Ok(#name {
                     #(#set_fields,)*
